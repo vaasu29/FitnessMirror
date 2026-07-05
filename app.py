@@ -17,6 +17,7 @@ Deploy for free:
 import os
 import tempfile
 import time
+import base64
 
 import av
 import cv2
@@ -29,11 +30,180 @@ from video_processor import ExerciseSession
 
 st.set_page_config(page_title="AI Fitness Mirror", page_icon="🏋️", layout="wide")
 
-EXERCISE_LABELS = {"squat": "Squat", "pushup": "Push-up", "curl": "Bicep Curl"}
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap');
+
+:root {
+    --primary: #4be277;
+    --primary-container: #22c55e;
+    --on-primary: #003915;
+    --background: #0b1326;
+    --surface: #0b1326;
+    --surface-container: #171f33;
+    --surface-container-high: #222a3d;
+    --surface-variant: #2d3449;
+    --on-surface: #dae2fd;
+    --on-surface-variant: #bccbb9;
+    --error: #ffb4ab;
+    --outline-variant: #3d4a3d;
+}
+
+html, body, [class*="css"]  {
+    font-family: 'Inter', sans-serif;
+}
+
+.stApp {
+    background: var(--background);
+    color: var(--on-surface);
+}
+
+section[data-testid="stSidebar"] {
+    background: rgba(23, 31, 51, 0.6);
+    border-right: 1px solid var(--outline-variant);
+}
+
+section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] .stMarkdown p {
+    color: var(--on-surface);
+}
+
+/* Card-style containers */
+.fm-card {
+    background: rgba(23, 31, 51, 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+}
+
+.fm-card-accent {
+    border: 1px solid rgba(74,225,118,0.3);
+    box-shadow: 0 0 30px rgba(74,225,118,0.05);
+}
+
+.fm-label {
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--on-surface-variant);
+    margin-bottom: 8px;
+}
+
+.fm-big-number {
+    font-family: 'Manrope', sans-serif;
+    font-size: 56px;
+    font-weight: 800;
+    color: var(--on-surface);
+    text-align: center;
+    line-height: 1;
+    text-shadow: 0 0 15px rgba(255,255,255,0.15);
+}
+
+.fm-status-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.fm-status-row span:last-child {
+    font-family: 'Manrope', monospace;
+    color: var(--on-surface);
+}
+
+.fm-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(23,31,51,0.8);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: 'Manrope', monospace;
+    font-size: 13px;
+    color: var(--on-surface);
+}
+
+.fm-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 8px var(--primary);
+    display: inline-block;
+    animation: fm-pulse 1.5s infinite;
+}
+
+@keyframes fm-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.fm-mistake-thumb {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255,180,171,0.5);
+    position: relative;
+}
+
+.fm-mistake-thumb.ok {
+    border: 1px solid rgba(74,225,118,0.4);
+}
+
+.fm-mistake-label {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    background: var(--error);
+    color: #690005;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.fm-mistake-label.ok {
+    background: var(--primary);
+    color: var(--on-primary);
+}
+
+/* Buttons */
+div.stButton > button, div.stDownloadButton > button {
+    background: var(--primary);
+    color: var(--on-primary);
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+}
+div.stButton > button:hover, div.stDownloadButton > button:hover {
+    background: #6bff8f;
+    color: var(--on-primary);
+}
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+EXERCISE_LABELS = {"auto": "🔍 Auto-detect", "squat": "Squat", "pushup": "Push-up", "curl": "Bicep Curl"}
 
 
 def sidebar_controls():
-    st.sidebar.title("🏋️ AI Fitness Mirror")
+    st.sidebar.markdown(
+        """
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
+            <div style="width:40px;height:40px;border-radius:50%;background:var(--primary-container);
+                        display:flex;align-items:center;justify-content:center;font-size:20px;">🏋️</div>
+            <div>
+                <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:var(--primary);">
+                    AI Fitness Mirror
+                </div>
+                <div class="fm-label" style="margin:0;">Elite Performance Tracking</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     mode = st.sidebar.radio("Mode", ["Upload a video", "Live webcam"])
     exercise_key = st.sidebar.selectbox(
         "Exercise", list(EXERCISE_LABELS.keys()), format_func=lambda k: EXERCISE_LABELS[k]
@@ -77,19 +247,47 @@ def run_upload_mode(exercise_key):
     writer = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
 
     detector = PoseDetector()
-    analyzer = EXERCISES[exercise_key]()
+    initial_key = exercise_key if exercise_key != "auto" else "squat"
+    analyzer = EXERCISES[initial_key]()
     session = ExerciseSession(detector, analyzer, exercise_key)
 
     progress = st.progress(0, text="Analyzing video...")
     frame_idx = 0
+    thumbnails = []  # list of (time_seconds, label, is_error, jpg_bytes)
+    last_issue_seen = None
+    last_thumb_time = -999
 
     while True:
         ok, frame = cap.read()
         if not ok:
             break
         video_time = frame_idx / fps
-        annotated, _ = session.process_frame(frame, video_time_seconds=video_time)
+        annotated, result = session.process_frame(frame, video_time_seconds=video_time)
         writer.write(annotated)
+
+        issues = result.get("issues", [])
+        current_issue = issues[0] if issues else None
+
+        # Capture a thumbnail whenever a new mistake type appears, or
+        # periodically (every ~4s) when form is good, to mirror the design's
+        # mixed timeline of errors + "Optimal" snapshots.
+        should_capture = False
+        label, is_error = None, False
+        if current_issue and current_issue != last_issue_seen:
+            should_capture = True
+            label, is_error = current_issue, True
+        elif not current_issue and result.get("score") is not None and video_time - last_thumb_time > 4:
+            should_capture = True
+            label, is_error = "Optimal", False
+
+        if should_capture and len(thumbnails) < 10:
+            small = cv2.resize(annotated, (200, 120))
+            ok_enc, buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if ok_enc:
+                thumbnails.append((round(video_time, 1), label, is_error, buf.tobytes()))
+            last_thumb_time = video_time
+
+        last_issue_seen = current_issue
 
         frame_idx += 1
         if total_frames > 0 and frame_idx % 5 == 0:
@@ -103,27 +301,104 @@ def run_upload_mode(exercise_key):
     summary = session.summary()
 
     st.success("Analysis complete!")
-    col1, col2 = st.columns([3, 2])
+    col1, col2 = st.columns([8, 4])
 
     with col1:
-        st.subheader("Annotated video")
+        st.markdown('<div class="fm-card">', unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style="display:flex;gap:12px;margin-bottom:12px;">
+                <span class="fm-pill"><span class="fm-dot"></span>ANALYZED</span>
+                <span class="fm-pill">{uploaded.name.upper()}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.video(out_path)
+        st.markdown('</div>', unsafe_allow_html=True)
+
         with open(out_path, "rb") as f:
             st.download_button("⬇️ Download annotated video", f, file_name="fitness_mirror_annotated.mp4")
 
-    with col2:
-        st.subheader("Session summary")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Reps", summary["reps"])
-        m2.metric("Avg Form Score", f'{summary["avg_form_score"]}%')
-        m3.metric("Duration", f'{summary["duration_seconds"]}s')
-
-        st.subheader("What was wrong (and when)")
-        if summary["mistakes"]:
-            for t, issue in summary["mistakes"]:
-                st.write(f"⏱️ **{t}s** — {issue}")
+        # Mistake / highlight timeline (real thumbnails pulled from the video)
+        st.markdown('<div class="fm-card">', unsafe_allow_html=True)
+        st.markdown('<div class="fm-label">Mistake Timeline</div>', unsafe_allow_html=True)
+        if thumbnails:
+            cols = st.columns(len(thumbnails))
+            for c, (t, label, is_error, jpg_bytes) in zip(cols, thumbnails):
+                with c:
+                    b64 = base64.b64encode(jpg_bytes).decode()
+                    css_class = "fm-mistake-thumb" if is_error else "fm-mistake-thumb ok"
+                    label_class = "fm-mistake-label" if is_error else "fm-mistake-label ok"
+                    st.markdown(
+                        f"""
+                        <div class="{css_class}">
+                            <img src="data:image/jpeg;base64,{b64}" style="width:100%;display:block;">
+                            <div class="{label_class}">{label}</div>
+                        </div>
+                        <div style="text-align:center;font-size:11px;color:var(--on-surface-variant);margin-top:4px;">{t}s</div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
         else:
-            st.write("No form issues detected — nice work! 🎉")
+            st.caption("No timeline snapshots captured for this session.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col2:
+        # Rep count card
+        st.markdown(
+            f"""
+            <div class="fm-card" style="text-align:center;">
+                <div class="fm-label">Rep Count</div>
+                <div class="fm-big-number">{summary['reps']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Form score circular gauge
+        score = summary["avg_form_score"]
+        circumference = 282.7
+        offset = circumference * (1 - score / 100)
+        gauge_color = "#4be277" if score >= 80 else "#ffb347" if score >= 50 else "#ffb4ab"
+        st.markdown(
+            f"""
+            <div class="fm-card fm-card-accent" style="text-align:center;">
+                <div class="fm-label">Form Score</div>
+                <svg width="140" height="140" viewBox="0 0 100 100" style="transform:rotate(-90deg);">
+                    <circle cx="50" cy="50" r="45" fill="transparent" stroke="#2d3449" stroke-width="6"></circle>
+                    <circle cx="50" cy="50" r="45" fill="transparent" stroke="{gauge_color}"
+                            stroke-width="6" stroke-dasharray="{circumference}"
+                            stroke-dashoffset="{offset}" stroke-linecap="round"
+                            style="filter:drop-shadow(0 0 8px {gauge_color});"></circle>
+                </svg>
+                <div style="margin-top:-90px;font-family:'Manrope',monospace;font-size:28px;font-weight:700;color:{gauge_color};">
+                    {score:.0f}%
+                </div>
+                <div style="height:40px;"></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Status / stats card
+        mistakes_html = "".join(
+            f'<div class="fm-status-row"><span>{t}s</span><span>{issue}</span></div>'
+            for t, issue in summary["mistakes"][:6]
+        ) or '<div class="fm-status-row"><span>No issues detected 🎉</span><span></span></div>'
+
+        st.markdown(
+            f"""
+            <div class="fm-card">
+                <div class="fm-label">Session Summary</div>
+                <div class="fm-status-row"><span>Exercise</span><span>{summary['exercise']}</span></div>
+                <div class="fm-status-row"><span>Duration</span><span>{summary['duration_seconds']}s</span></div>
+                <div style="margin-top:16px;" class="fm-label">What Was Wrong</div>
+                {mistakes_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +415,8 @@ class LiveProcessor(VideoProcessorBase):
     def set_exercise(self, exercise_key):
         if exercise_key != self.exercise_key:
             self.exercise_key = exercise_key
-            self.analyzer = EXERCISES[exercise_key]()
+            initial_key = exercise_key if exercise_key != "auto" else "squat"
+            self.analyzer = EXERCISES[initial_key]()
             self.session = ExerciseSession(self.detector, self.analyzer, exercise_key)
 
     def recv(self, frame):
