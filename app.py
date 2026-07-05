@@ -283,7 +283,7 @@ def sidebar_controls():
     st.sidebar.markdown('<div class="fm-label" style="margin-top:20px;">Exercises</div>', unsafe_allow_html=True)
 
     # --- Exercise nav ---
-    exercise_items = [("auto", "🔍 Auto-detect"), ("squat", "🏋️ Squats"), ("pushup", "🏃 Push-ups"), ("curl", "🤸 Bicep Curls")]
+    exercise_items = [("auto", "🔍 Auto-detect"), ("squat", "🏋️ Squats"), ("pushup", "🫸 Push-ups"), ("curl", "💪 Bicep Curls")]
     for key, label in exercise_items:
         active = st.session_state.exercise_key == key
         if st.sidebar.button(label, key=f"ex_{key}", use_container_width=True,
