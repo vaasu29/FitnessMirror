@@ -181,6 +181,67 @@ div.stButton > button:hover, div.stDownloadButton > button:hover {
     background: #6bff8f;
     color: var(--on-primary);
 }
+
+/* Sidebar nav: secondary (inactive) buttons look like plain nav rows */
+section[data-testid="stSidebar"] button[kind="secondary"] {
+    background: transparent !important;
+    color: var(--on-surface-variant) !important;
+    border: none !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    font-weight: 600 !important;
+}
+section[data-testid="stSidebar"] button[kind="secondary"]:hover {
+    background: rgba(255,255,255,0.06) !important;
+    color: var(--on-surface) !important;
+}
+section[data-testid="stSidebar"] button[kind="primary"] {
+    background: var(--primary) !important;
+    color: var(--on-primary) !important;
+    border: none !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 12px rgba(74,225,118,0.3);
+}
+
+/* Header action buttons (Download / Upload New Video style) */
+.fm-header-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    text-decoration: none;
+}
+.fm-header-btn.dark {
+    background: rgba(11,19,38,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--on-surface);
+}
+.fm-header-btn.green {
+    background: var(--primary);
+    color: var(--on-primary);
+}
+
+/* Hero background behind the video panel */
+.fm-hero-bg {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    min-height: 380px;
+}
+.fm-hero-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(11,19,38,0.95), rgba(11,19,38,0.2));
+}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -189,10 +250,15 @@ EXERCISE_LABELS = {"auto": "🔍 Auto-detect", "squat": "Squat", "pushup": "Push
 
 
 def sidebar_controls():
+    if "mode" not in st.session_state:
+        st.session_state.mode = "Upload a video"
+    if "exercise_key" not in st.session_state:
+        st.session_state.exercise_key = "auto"
+
     st.sidebar.markdown(
         """
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
-            <div style="width:40px;height:40px;border-radius:50%;background:var(--primary-container);
+            <div style="width:40px;height:40px;border-radius:12px;background:var(--primary-container);
                         display:flex;align-items:center;justify-content:center;font-size:20px;">🏋️</div>
             <div>
                 <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:var(--primary);">
@@ -204,27 +270,75 @@ def sidebar_controls():
         """,
         unsafe_allow_html=True,
     )
-    mode = st.sidebar.radio("Mode", ["Upload a video", "Live webcam"])
-    exercise_key = st.sidebar.selectbox(
-        "Exercise", list(EXERCISE_LABELS.keys()), format_func=lambda k: EXERCISE_LABELS[k]
-    )
+
+    # --- Mode nav (Video Upload / Live Webcam) ---
+    nav_items = [("Upload a video", "☁️ Video Upload"), ("Live webcam", "🎥 Live Webcam")]
+    for key, label in nav_items:
+        active = st.session_state.mode == key
+        if st.sidebar.button(label, key=f"nav_{key}", use_container_width=True,
+                              type="primary" if active else "secondary"):
+            st.session_state.mode = key
+            st.rerun()
+
+    st.sidebar.markdown('<div class="fm-label" style="margin-top:20px;">Exercises</div>', unsafe_allow_html=True)
+
+    # --- Exercise nav ---
+    exercise_items = [("auto", "🔍 Auto-detect"), ("squat", "🏋️ Squats"), ("pushup", "🏃 Push-ups"), ("curl", "🤸 Bicep Curls")]
+    for key, label in exercise_items:
+        active = st.session_state.exercise_key == key
+        if st.sidebar.button(label, key=f"ex_{key}", use_container_width=True,
+                              type="primary" if active else "secondary"):
+            st.session_state.exercise_key = key
+            st.rerun()
+
     st.sidebar.markdown("---")
     st.sidebar.caption(
         "Tip: stand far enough back that your full body is in frame, "
         "side-on works best for squats and push-ups."
     )
-    return mode, exercise_key
+    st.sidebar.button("Start Session", use_container_width=True, type="primary")
+
+    return st.session_state.mode, st.session_state.exercise_key
 
 
 # ---------------------------------------------------------------------------
 # Mode 1: Upload a video
 # ---------------------------------------------------------------------------
 def run_upload_mode(exercise_key):
-    st.header("📤 Upload a video for analysis")
-    uploaded = st.file_uploader("Upload a video (mp4, mov, avi)", type=["mp4", "mov", "avi", "mkv"])
+    col_title, col_actions = st.columns([2, 1])
+    with col_title:
+        st.markdown(
+            '<h1 style="font-family:\'Manrope\',sans-serif;font-weight:800;">📤 Upload a video for analysis</h1>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Upload a video (mp4, mov, avi)")
+    with col_actions:
+        st.markdown(
+            """
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+                <span class="fm-header-btn dark">⬇ Download Analysis Report</span>
+                <span class="fm-header-btn green">+ Upload New Video</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    uploaded = st.file_uploader("Upload a video (mp4, mov, avi)", type=["mp4", "mov", "avi", "mkv"],
+                                 label_visibility="collapsed")
 
     if uploaded is None:
-        st.info("Upload a workout video to get rep count, form score, and a mistake timeline.")
+        st.markdown(
+            """
+            <div class="fm-hero-bg" style="background-image:url('https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1200&q=80');">
+                <div style="position:relative;z-index:1;height:380px;display:flex;align-items:flex-end;padding:24px;">
+                    <span style="font-family:'Manrope',sans-serif;color:var(--on-surface-variant);">
+                        Upload a workout video to get rep count, form score, and a mistake timeline.
+                    </span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         return
 
     # Persist the upload to a temp file so OpenCV can read it
